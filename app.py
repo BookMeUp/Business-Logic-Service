@@ -1,6 +1,6 @@
 from functools import wraps
 from flask import Flask, request, jsonify
-from flask_jwt_extended import JWTManager, get_jwt_identity, verify_jwt_in_request
+from flask_jwt_extended import JWTManager, get_jwt_identity, verify_jwt_in_request, get_jwt
 import requests
 
 app = Flask(__name__)
@@ -17,8 +17,8 @@ def requires_role(required_role):
         @wraps(f)
         def wrapper(*args, **kwargs):
             verify_jwt_in_request()
-            user = get_jwt_identity()
-            if user["role"] != required_role:
+            claims = get_jwt()
+            if claims["role"] != required_role:
                 return jsonify({"error": f"Access restricted to {required_role} role"}), 403
             return f(*args, **kwargs)
         return wrapper
@@ -42,11 +42,11 @@ def get_services():
 @app.route("/appointments", methods=["POST"])
 @requires_role("customer")
 def create_appointment():
-    user = get_jwt_identity()
+    user_id = get_jwt_identity()  # now just a string (user ID)
 
     data = request.json
     appointment_data = {
-        "user_id": user["id"],
+        "user_id": user_id,
         "service_id": data["service_id"],
         "date": data["date"],
         "time": data["time"]
@@ -58,18 +58,18 @@ def create_appointment():
 @app.route("/appointments/me", methods=["GET"])
 @requires_role("customer")
 def get_my_appointments():
-    user = get_jwt_identity()
+    user_id = get_jwt_identity()  # now just a string (user ID)
 
-    response = requests.get(f"{DB_SERVICE_URL}/appointments/user/{user['id']}")
+    response = requests.get(f"{DB_SERVICE_URL}/appointments/user/{user_id}")
     return jsonify(response.json()), response.status_code
 
 @app.route("/appointments/me/<int:appointment_id>", methods=["DELETE"])
 @requires_role("customer")
 def delete_appointment(appointment_id):
-    user = get_jwt_identity()
+    user_id = get_jwt_identity()  # now just a string (user ID)
 
     # Fetch user's appointments from db-service
-    response = requests.get(f"{DB_SERVICE_URL}/appointments/user/{user['id']}")
+    response = requests.get(f"{DB_SERVICE_URL}/appointments/user/{user_id}")
     if response.status_code != 200:
         return jsonify({"error": "Could not verify user ownership"}), 403
 
