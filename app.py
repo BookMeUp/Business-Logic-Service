@@ -129,7 +129,7 @@ def create_appointment():
 # This endpoint is for customer only
 @app.route("/appointments/me/<int:appointment_id>", methods=["PUT"])
 @requires_role("customer")
-def update_appointment(appointment_id):
+def update_appointment_as_customer(appointment_id):
     user_id = get_jwt_identity()
 
     # Step 1: Verify the appointment belongs to the user
@@ -156,7 +156,7 @@ def update_appointment(appointment_id):
 # This endpoint is for customer only
 @app.route("/appointments/me/<int:appointment_id>", methods=["DELETE"])
 @requires_role("customer")
-def delete_appointment(appointment_id):
+def delete_appointment_as_customer(appointment_id):
     user_id = get_jwt_identity()
 
     # Fetch user's appointments from db-service
@@ -197,7 +197,7 @@ def update_appointment_as_staff(appointment_id):
 # This endpoint is for staff only
 @app.route("/appointments/<int:service_id>", methods=["DELETE"])
 @requires_role("staff")
-def delete_appointment(appointment_id):
+def delete_appointment_as_staff(appointment_id):
     response = requests.delete(f"{DB_SERVICE_URL}/appointments/{appointment_id}")
     return jsonify(response.json()), response.status_code
 
