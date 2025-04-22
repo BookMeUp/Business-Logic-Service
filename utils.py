@@ -1,8 +1,24 @@
+from functools import wraps
+from flask_jwt_extended import verify_jwt_in_request, get_jwt
+from flask import jsonify
 from datetime import datetime, timedelta
 import requests
 
 # Base URL for DB service
 DB_SERVICE_URL = "http://db-service:5003"
+
+# Role decorator
+def requires_role(required_role):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            verify_jwt_in_request()
+            claims = get_jwt()
+            if claims["role"] != required_role:
+                return jsonify({"error": f"Access restricted to {required_role} role"}), 403
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 def calculate_available_slots(availabilities, appointments, service_duration):
     def time_str_to_dt(t): return datetime.strptime(t, "%H:%M")
