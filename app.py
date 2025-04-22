@@ -3,14 +3,13 @@ from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, get_jwt_identity, verify_jwt_in_request, get_jwt, jwt_required
 import requests
 import bcrypt
+from datetime import datetime, timedelta
+from utils import calculate_available_slots, is_time_slot_valid, DB_SERVICE_URL
 
 app = Flask(__name__)
 app.config['JWT_SECRET_KEY'] = 'super-secret-key'  # same as in auth-service
 
 jwt = JWTManager(app)
-
-# Base URL for DB service
-DB_SERVICE_URL = "http://db-service:5003"
 
 # Role decorator
 def requires_role(required_role):
@@ -116,6 +115,11 @@ def create_appointment():
     user_id = get_jwt_identity()
 
     data = request.json
+
+    is_valid, error_msg = is_time_slot_valid(data["date"], data["time"], data["service_id"])
+    if not is_valid:
+        return jsonify({"error": error_msg}), 400
+
     appointment_data = {
         "user_id": user_id,
         "service_id": data["service_id"],
@@ -148,6 +152,11 @@ def update_appointment_as_customer(appointment_id):
 
     if not update_data:
         return jsonify({"error": "Only 'date' and 'time' can be updated"}), 400
+    
+    # Validate the new time slot
+    is_valid, error_msg = is_time_slot_valid(data["date"], data["time"], data["service_id"])
+    if not is_valid:
+        return jsonify({"error": error_msg}), 400
 
     # Step 3: Forward update to db-service
     response = requests.put(f"{DB_SERVICE_URL}/appointments/{appointment_id}", json=update_data)
@@ -181,6 +190,12 @@ def get_all_appointments():
     response = requests.get(f"{DB_SERVICE_URL}/appointments")
     return jsonify(response.json()), response.status_code
 
+@app.route("/appointments/date/<date>", methods=["GET"])
+@requires_role("staff")
+def get_appointments_by_date(date):
+    response = requests.get(f"{DB_SERVICE_URL}/appointments/date/{date}")
+    return jsonify(response.json()), response.status_code
+
 @app.route("/appointments/<int:appointment_id>", methods=["PUT"])
 @requires_role("staff")
 def update_appointment_as_staff(appointment_id):
@@ -190,6 +205,10 @@ def update_appointment_as_staff(appointment_id):
 
     if not update_data:
         return jsonify({"error": "Only 'date' and 'time' can be updated"}), 400
+    
+    is_valid, error_msg = is_time_slot_valid(data["date"], data["time"], data["service_id"])
+    if not is_valid:
+        return jsonify({"error": error_msg}), 400
 
     response = requests.put(f"{DB_SERVICE_URL}/appointments/{appointment_id}", json=update_data)
     return jsonify(response.json()), response.status_code
@@ -200,6 +219,102 @@ def update_appointment_as_staff(appointment_id):
 def delete_appointment_as_staff(appointment_id):
     response = requests.delete(f"{DB_SERVICE_URL}/appointments/{appointment_id}")
     return jsonify(response.json()), response.status_code
+
+# ---------------- AVAILABILITY ----------------
+
+@app.route("/availability/<date>", methods=["GET"])
+@requires_role("staff")
+def get_availability(date):
+    response = requests.get(f"{DB_SERVICE_URL}/availability/{date}")
+    return jsonify(response.json()), response.status_code
+
+@app.route("/availability", methods=["POST"])
+@requires_role("staff")
+def define_availability():
+    data = request.json
+    date = data["date"]
+    new_start = datetime.strptime(data["start_time"], "%H:%M")
+    new_end = datetime.strptime(data["end_time"], "%H:%M")
+
+    # Get all existing availability for this date
+    response = requests.get(f"{DB_SERVICE_URL}/availability/{date}")
+    existing = response.json()
+
+    # Check for overlap
+    for slot in existing:
+        existing_start = datetime.strptime(slot["start_time"], "%H:%M")
+        existing_end = datetime.strptime(slot["end_time"], "%H:%M")
+
+        if new_start < existing_end and new_end > existing_start:
+            return jsonify({"error": "Availability overlaps with an existing time slot"}), 400
+
+    # Proceed to create availability
+    create_resp = requests.post(f"{DB_SERVICE_URL}/availability", json=data)
+    return jsonify(create_resp.json()), create_resp.status_code
+
+@app.route("/availability/<int:availability_id>", methods=["DELETE"])
+@requires_role("staff")
+def delete_availability(availability_id):
+    # Fetch availability by ID
+    avail_resp = requests.get(f"{DB_SERVICE_URL}/availability/id/{availability_id}")
+    if avail_resp.status_code != 200:
+        return jsonify({"error": "Availability not found"}), 404
+    availability = avail_resp.json()
+
+    date = availability["date"]
+    avail_start = datetime.strptime(availability["start_time"], "%H:%M")
+    avail_end = datetime.strptime(availability["end_time"], "%H:%M")
+
+    # Fetch all appointments for that date
+    appt_resp = requests.get(f"{DB_SERVICE_URL}/appointments/date/{date}")
+    if appt_resp.status_code != 200:
+        return jsonify({"error": "Could not fetch appointments"}), 400
+
+    appointments = appt_resp.json()
+
+    # Check for overlap with appointments
+    for appt in appointments:
+        appt_time = datetime.strptime(appt["time"], "%H:%M")
+
+        # Fetch service duration
+        service_resp = requests.get(f"{DB_SERVICE_URL}/services/{appt['service_id']}")
+        if service_resp.status_code != 200:
+            continue
+
+        duration = int(service_resp.json()["duration"])
+        appt_end = appt_time + timedelta(minutes=duration)
+
+        if appt_time < avail_end and avail_start < appt_end:
+            return jsonify({"error": "Cannot delete availability with booked appointments"}), 400
+
+    # Safe to delete
+    delete_resp = requests.delete(f"{DB_SERVICE_URL}/availability/{availability_id}")
+    return jsonify(delete_resp.json()), delete_resp.status_code
+
+@app.route("/available-timeslots", methods=["GET"])
+@requires_role("customer")
+def get_available_timeslots():
+    date = request.args.get("date")
+    service_id = request.args.get("service_id")
+
+    # Get service duration
+    service_resp = requests.get(f"{DB_SERVICE_URL}/services/{service_id}")
+    if service_resp.status_code != 200:
+        return jsonify({"error": "Service not found"}), 404
+    duration = int(service_resp.json()["duration"])
+
+    # Get availability for date
+    avail_resp = requests.get(f"{DB_SERVICE_URL}/availability/{date}")
+    availabilities = avail_resp.json()
+
+    # Get existing appointments
+    appt_resp = requests.get(f"{DB_SERVICE_URL}/appointments/date/{date}")
+    appointments = appt_resp.json()
+
+    # Generate available time slots
+    available_slots = calculate_available_slots(availabilities, appointments, duration)
+
+    return jsonify({"available_slots": available_slots}), 200
 
 # ---------------- MAIN ----------------
 
