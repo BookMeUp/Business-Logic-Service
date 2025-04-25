@@ -2,3 +2,4 @@ Flask==2.3.2
 Flask-JWT-Extended
 requests
 bcrypt
+prometheus_flask_exporter
