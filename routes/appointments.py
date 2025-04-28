@@ -61,8 +61,16 @@ def update_appointment_as_customer(appointment_id):
     if not update_data:
         return jsonify({"error": "Only 'date' and 'time' can be updated"}), 400
     
+    # Fetch the existing appointment
+    appt_resp = requests.get(f"{DB_SERVICE_URL}/appointments/{appointment_id}")
+    if appt_resp.status_code != 200:
+        return jsonify({"error": "Appointment not found"}), 404
+
+    existing_appt = appt_resp.json()
+    service_id = existing_appt["service_id"]
+    
     # Validate the new time slot
-    is_valid, error_msg = is_time_slot_valid(data["date"], data["time"], data["service_id"])
+    is_valid, error_msg = is_time_slot_valid(data["date"], data["time"], service_id)
     if not is_valid:
         return jsonify({"error": error_msg}), 400
 
@@ -113,16 +121,26 @@ def update_appointment_as_staff(appointment_id):
 
     if not update_data:
         return jsonify({"error": "Only 'date' and 'time' can be updated"}), 400
-    
-    is_valid, error_msg = is_time_slot_valid(data["date"], data["time"], data["service_id"])
+
+    # Fetch the existing appointment
+    appt_resp = requests.get(f"{DB_SERVICE_URL}/appointments/{appointment_id}")
+    if appt_resp.status_code != 200:
+        return jsonify({"error": "Appointment not found"}), 404
+
+    existing_appt = appt_resp.json()
+    service_id = existing_appt["service_id"]
+
+    # Now validate with the correct service_id
+    is_valid, error_msg = is_time_slot_valid(data["date"], data["time"], service_id)
     if not is_valid:
         return jsonify({"error": error_msg}), 400
 
+    # Proceed with updating
     response = requests.put(f"{DB_SERVICE_URL}/appointments/{appointment_id}", json=update_data)
     return jsonify(response.json()), response.status_code
 
 # This endpoint is for staff only
-@appointments_bp.route("/appointments/<int:service_id>", methods=["DELETE"])
+@appointments_bp.route("/appointments/<int:appointment_id>", methods=["DELETE"])
 @requires_role("staff")
 def delete_appointment_as_staff(appointment_id):
     response = requests.delete(f"{DB_SERVICE_URL}/appointments/{appointment_id}")
