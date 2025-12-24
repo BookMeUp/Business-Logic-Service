@@ -3,9 +3,7 @@ from flask_jwt_extended import verify_jwt_in_request, get_jwt
 from flask import jsonify
 from datetime import datetime, timedelta
 import requests
-
-# Base URL for DB service
-DB_SERVICE_URL = "http://db-service:5003"
+from app import DB_SERVICE_URL
 
 # Role decorator
 def requires_role(required_role):

@@ -10,8 +10,10 @@ metrics = PrometheusMetrics(app)
 
 # Secret key for JWT - use environment variable with fallback
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret-key')
-
 jwt = JWTManager(app)
+
+# The base URL of the db-service - use environment variable with fallback
+DB_SERVICE_URL = os.getenv('DB_SERVICE_URL', 'http://db-service:5003')
 
 register_blueprints(app)
 

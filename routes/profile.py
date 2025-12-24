@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import bcrypt
 import requests
-from utils import DB_SERVICE_URL
+from app import DB_SERVICE_URL
 
 profile_bp = Blueprint("profile", __name__)
 
