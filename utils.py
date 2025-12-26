@@ -1,9 +1,12 @@
 from functools import wraps
+import os
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 from flask import jsonify
 from datetime import datetime, timedelta
 import requests
-from app import DB_SERVICE_URL
+
+# The base URL of the db-service - use environment variable with fallback
+DB_SERVICE_URL = os.getenv('DB_SERVICE_URL', 'http://db-service:5003')
 
 # Role decorator
 def requires_role(required_role):

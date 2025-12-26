@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 import requests
-from app import DB_SERVICE_URL
-from utils import requires_role
+from utils import requires_role, DB_SERVICE_URL
 
 services_bp = Blueprint("services", __name__)
 

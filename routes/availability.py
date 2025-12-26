@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify
 import requests
 from datetime import datetime, timedelta
-from app import DB_SERVICE_URL
-from utils import requires_role, calculate_available_slots
+from utils import requires_role, calculate_available_slots, DB_SERVICE_URL
 
 availability_bp = Blueprint("availability", __name__)
 

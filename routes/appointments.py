@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
 import requests
-from app import DB_SERVICE_URL
-from utils import requires_role, is_time_slot_valid
+from utils import requires_role, is_time_slot_valid, DB_SERVICE_URL
 
 appointments_bp = Blueprint("appointments", __name__)
 
